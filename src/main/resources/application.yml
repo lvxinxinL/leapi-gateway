@@ -1,2 +1,18 @@
 server:
   port: 8103
+spring:
+  cloud:
+    gateway:
+      default-filters:
+        - AddResponseHeader=source, ghost
+      routes:
+        - id: api_route
+          uri: http://localhost:8102
+          predicates:
+            - Path=/api/**
+logging:
+  level:
+    org:
+      springframework:
+        cloud:
+          gateway: trace

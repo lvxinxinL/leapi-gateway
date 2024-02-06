@@ -13,13 +13,13 @@ public class LeapiGatewayApplication {
         SpringApplication.run(LeapiGatewayApplication.class, args);
     }
 
-    @Bean
-    public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
-        return builder.routes()
-                .route("path_route", r -> r.path("/baidu")
-                        .uri("https://baidu.com"))
-                .route("host_route", r -> r.path("/lexiaoxin")
-                        .uri("https://blog.csdn.net/m0_74059961?spm=1011.2266.3001.5343"))
-                .build();
-    }
+//    @Bean
+//    public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
+//        return builder.routes()
+//                .route("path_route", r -> r.path("/baidu")
+//                        .uri("https://baidu.com"))
+//                .route("host_route", r -> r.path("/lexiaoxin")
+//                        .uri("https://blog.csdn.net/m0_74059961?spm=1011.2266.3001.5343"))
+//                .build();
+//    }
 }
