@@ -2,18 +2,25 @@ package com.ghost.leapigateway;
 
 import com.ghost.leapiclientsdk.utils.SignUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Publisher;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -43,7 +50,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         // 3. 访问控制——（黑白名单）
         // 取到响应对象
         ServerHttpResponse response = exchange.getResponse();
-        if (IP_WHITE_LIST.contains(sourceAddress)) {
+        if (!IP_WHITE_LIST.contains(sourceAddress)) {
             // 请求来源地址不在白名单中，无权限访问
             // 设置响应状态码
             return handleNoAuth(response);
@@ -78,18 +85,68 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         }
         // 5. todo 判断请求的模拟接口是否存在（从 leapi-backend 项目的数据库中查询）
         // 6. 请求转发，调用模拟接口
-        Mono<Void> filter = chain.filter(exchange);
-        log.info("响应：" + response.getStatusCode());
-        // 7. 响应日志：编程式网关
-        if (response.getStatusCode().equals(HttpStatus.OK)) {
-            // 8. todo 调用成功，接口调用次数 + 1（leapi-backend 项目中已经写过了，到时候暴露出来使用）
-
-        } else {
-            // 9. 调用失败，返回规范错误码
-            handleInvokeError(response);
-        }
+//        Mono<Void> filter = chain.filter(exchange);
+//        log.info("响应：" + response.getStatusCode());
         log.info("custom global filter");
-        return filter;
+        return handleResponse(exchange, chain);
+    }
+
+    /**
+     * 处理响应
+     *
+     * @param exchange
+     * @param chain
+     * @return
+     */
+    public Mono<Void> handleResponse(ServerWebExchange exchange, GatewayFilterChain chain) {
+        try {
+            ServerHttpResponse originalResponse = exchange.getResponse();
+            // 缓存数据的工厂
+            DataBufferFactory bufferFactory = originalResponse.bufferFactory();
+            // 拿到响应码
+            HttpStatus statusCode = originalResponse.getStatusCode();
+            if (statusCode == HttpStatus.OK) {
+                // 装饰，增强能力
+                ServerHttpResponseDecorator decoratedResponse = new ServerHttpResponseDecorator(originalResponse) {
+                    // 等调用完转发的接口后才会执行
+                    @Override
+                    public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+                        log.info("body instanceof Flux: {}", (body instanceof Flux));
+                        if (body instanceof Flux) {
+                            Flux<? extends DataBuffer> fluxBody = Flux.from(body);
+                            // 往返回值里写数据
+                            // 拼接字符串
+                            return super.writeWith(
+                                    fluxBody.map(dataBuffer -> {
+                                        // 7. todo 调用成功，接口调用次数 + 1 invokeCount
+                                        byte[] content = new byte[dataBuffer.readableByteCount()];
+                                        dataBuffer.read(content);
+                                        DataBufferUtils.release(dataBuffer);//释放掉内存
+                                        // 构建日志
+                                        StringBuilder sb2 = new StringBuilder(200);
+                                        List<Object> rspArgs = new ArrayList<>();
+                                        rspArgs.add(originalResponse.getStatusCode());
+                                        String data = new String(content, StandardCharsets.UTF_8); //data
+                                        sb2.append(data);
+                                        // 打印日志
+                                        log.info("响应结果：" + data);
+                                        return bufferFactory.wrap(content);
+                                    }));
+                        } else {
+                            // 8. 调用失败，返回一个规范的错误码
+                            log.error("<--- {} 响应code异常", getStatusCode());
+                        }
+                        return super.writeWith(body);
+                    }
+                };
+                // 设置 response 对象为装饰过的
+                return chain.filter(exchange.mutate().response(decoratedResponse).build());
+            }
+            return chain.filter(exchange); // 降级处理返回数据
+        } catch (Exception e) {
+            log.error("网关处理响应异常" + e);
+            return chain.filter(exchange);
+        }
     }
 
     /**
