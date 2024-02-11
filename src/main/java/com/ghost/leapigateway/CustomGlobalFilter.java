@@ -1,6 +1,11 @@
 package com.ghost.leapigateway;
 
 import com.ghost.leapiclientsdk.utils.SignUtil;
+import com.ghost.leapicommon.model.entity.InterfaceInfo;
+import com.ghost.leapicommon.model.entity.User;
+import com.ghost.leapicommon.service.InnerInterfaceInfoService;
+import com.ghost.leapicommon.service.InnerUserInterfaceService;
+import com.ghost.leapicommon.service.InnerUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -18,8 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.net.InetAddress;
+import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,13 +40,26 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
     private static final List<String> IP_WHITE_LIST = Arrays.asList("127.0.0.1");
 
+    @Resource
+    private InnerUserInterfaceService innerUserInterfaceService;
+
+    @Resource
+    private InnerUserService innerUserService;
+
+    @Resource
+    private InnerInterfaceInfoService innerInterfaceInfoService;
+
+    private static final String INTERFACE_HOST = "http://localhost:8102";
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         // 2. 请求日志
         ServerHttpRequest request = exchange.getRequest();
+        String path = INTERFACE_HOST + request.getPath().value();// 请求路径
+        String method = request.getMethod().toString();// 请求方法
         log.info("请求唯一标识：" + request.getId());
-        log.info("请求路径：" + request.getPath().value());
-        log.info("请求方法：" + request.getMethod());
+        log.info("请求路径：" + path);
+        log.info("请求方法：" + method);
         log.info("请求参数：" + request.getQueryParams());
         String sourceAddress = request.getLocalAddress().getHostString();
         log.info("请求来源地址：" + sourceAddress);
@@ -55,7 +72,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             // 设置响应状态码
             return handleNoAuth(response);
         }
-        // todo 4. 用户鉴权（判断 ak、sk 是否合法）
+        // 4. 用户鉴权（判断 ak、sk 是否合法）
         // 获取请求头中携带的参数，校验调用接口的权限
         HttpHeaders headers = request.getHeaders();
         String accessKey = headers.getFirst("accessKey");
@@ -63,10 +80,21 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         String body = headers.getFirst("body");
         String timestamp = headers.getFirst("timestamp");
         String sign = headers.getFirst("sign");
-        // TODO 实际上要从数据库查是否已分配给用户
-        if (!accessKey.equals("ghost")) {
+        // 实际上要从数据库查是否已分配给用户
+        User invokeUser = null;
+        try {
+            invokeUser = innerUserService.getInvokeUser(accessKey);
+        } catch (Exception e) {
+            log.error("getInvokeUser error", e);
+        }
+        if (invokeUser == null) {
+            // 如果用户信息为空，处理未授权情况并返回响应
             return handleNoAuth(response);
         }
+//        if (!accessKey.equals("ghost")) {
+//            return handleNoAuth(response);
+//        }
+
         // 校验随机数
         if (Long.parseLong(nonce) > 100000) {
             return handleNoAuth(response);
@@ -79,16 +107,29 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             return handleNoAuth(response);
         }
         // 和客户端使用同一套加密算法进行校验
-        String serverSign = SignUtil.genSign(body, "abcdefg");// TODO 实际上要从数据库中取出数据进行校验
+        // 实际上要从数据库中取出数据进行校验
+        String serverSign = SignUtil.genSign(body, invokeUser.getSecretKey());
         if (!serverSign.equals(sign)) {
             return handleNoAuth(response);
         }
-        // 5. todo 判断请求的模拟接口是否存在（从 leapi-backend 项目的数据库中查询）
+        // 5. 判断请求的模拟接口是否存在（从 leapi-backend 项目的数据库中查询）
+        InterfaceInfo interfaceInfo = null;
+        try {
+            interfaceInfo = innerInterfaceInfoService.getInterfaceInfo(path, method);
+        } catch (Exception e) {
+            log.error("getInterfaceInfo error", e);
+        }
+        if (interfaceInfo == null) {
+            // 如果接口信息为空，处理未授权情况并返回响应
+            return handleNoAuth(response);
+        }
+        // TODO 校验该用户是否还有调用次数
+
         // 6. 请求转发，调用模拟接口
 //        Mono<Void> filter = chain.filter(exchange);
 //        log.info("响应：" + response.getStatusCode());
         log.info("custom global filter");
-        return handleResponse(exchange, chain);
+        return handleResponse(exchange, chain, interfaceInfo.getId(), invokeUser.getId());
     }
 
     /**
@@ -98,7 +139,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
      * @param chain
      * @return
      */
-    public Mono<Void> handleResponse(ServerWebExchange exchange, GatewayFilterChain chain) {
+    public Mono<Void> handleResponse(ServerWebExchange exchange, GatewayFilterChain chain, long interfaceInfoId, long userId) {
         try {
             ServerHttpResponse originalResponse = exchange.getResponse();
             // 缓存数据的工厂
@@ -118,7 +159,8 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
                             // 拼接字符串
                             return super.writeWith(
                                     fluxBody.map(dataBuffer -> {
-                                        // 7. todo 调用成功，接口调用次数 + 1 invokeCount
+                                        // 7. 调用成功，接口调用次数 + 1 invokeCount
+                                        innerUserInterfaceService.invokeCount(interfaceInfoId, userId);
                                         byte[] content = new byte[dataBuffer.readableByteCount()];
                                         dataBuffer.read(content);
                                         DataBufferUtils.release(dataBuffer);//释放掉内存

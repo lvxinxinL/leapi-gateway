@@ -21,7 +21,7 @@ dubbo:
     name: dubbo-springboot-demo-provider
   protocol:
     name: dubbo
-    port: 20880
+    port: 22223
   registry:
     id: nacos-registry
     address: nacos://localhost:8848
