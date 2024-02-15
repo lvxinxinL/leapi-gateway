@@ -1,5 +1,6 @@
 package com.ghost.leapigateway;
 
+import cn.hutool.core.net.URLDecoder;
 import com.ghost.leapiclientsdk.utils.SignUtil;
 import com.ghost.leapicommon.model.entity.InterfaceInfo;
 import com.ghost.leapicommon.model.entity.User;
@@ -7,6 +8,7 @@ import com.ghost.leapicommon.service.InnerInterfaceInfoService;
 import com.ghost.leapicommon.service.InnerUserInterfaceService;
 import com.ghost.leapicommon.service.InnerUserService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.reactivestreams.Publisher;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -23,11 +25,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * @author 乐小鑫
@@ -40,13 +43,14 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
     private static final List<String> IP_WHITE_LIST = Arrays.asList("127.0.0.1");
 
-    @Resource
+    // 使用该注解注入服务提供者提供的服务类
+    @DubboReference
     private InnerUserInterfaceService innerUserInterfaceService;
 
-    @Resource
+    @DubboReference
     private InnerUserService innerUserService;
 
-    @Resource
+    @DubboReference
     private InnerInterfaceInfoService innerInterfaceInfoService;
 
     private static final String INTERFACE_HOST = "http://localhost:8102";
@@ -77,7 +81,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         HttpHeaders headers = request.getHeaders();
         String accessKey = headers.getFirst("accessKey");
         String nonce = headers.getFirst("nonce");
-        String body = headers.getFirst("body");
+        String body = URLDecoder.decode(headers.getFirst("body"), UTF_8);// 解决中文乱码
         String timestamp = headers.getFirst("timestamp");
         String sign = headers.getFirst("sign");
         // 实际上要从数据库查是否已分配给用户
@@ -168,7 +172,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
                                         StringBuilder sb2 = new StringBuilder(200);
                                         List<Object> rspArgs = new ArrayList<>();
                                         rspArgs.add(originalResponse.getStatusCode());
-                                        String data = new String(content, StandardCharsets.UTF_8); //data
+                                        String data = new String(content, UTF_8); //data
                                         sb2.append(data);
                                         // 打印日志
                                         log.info("响应结果：" + data);

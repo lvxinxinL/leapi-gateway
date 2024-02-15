@@ -1,6 +1,15 @@
 server:
   port: 8103
 spring:
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    #    url: jdbc:mysql://localhost:3306/my_db
+    url: jdbc:mysql://localhost:3306/leapi
+    username: root
+    password: root@csu
+  main:
+    web-application-type: reactive
   cloud:
     gateway:
       default-filters:
