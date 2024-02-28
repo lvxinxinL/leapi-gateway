@@ -20,7 +20,6 @@ public class LeapiGatewayApplication {
     private DemoService demoService;
 
     public static void main(String[] args) {
-
         ConfigurableApplicationContext context = SpringApplication.run(LeapiGatewayApplication.class, args);
         LeapiGatewayApplication application = context.getBean(LeapiGatewayApplication.class);
         String result = application.doSayHello("world");

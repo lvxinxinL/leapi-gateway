@@ -13,12 +13,12 @@ spring:
   cloud:
     gateway:
       default-filters:
-        - AddResponseHeader=source, ghost
+        - AddResponseHeader=source, ghost # 请求染色
       routes:
-        - id: api_route
-          uri: http://localhost:8102
+        - id: api_localhost # 路由规则唯一标识符
+          uri: http://localhost:8102 # 目标服务地址，匹配此路由规则的将被转发
           predicates:
-            - Path=/api/**
+            - Path=/api/** # 路由断言（路由规则）
 logging:
   level:
     org:

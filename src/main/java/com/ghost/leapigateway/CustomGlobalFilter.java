@@ -53,21 +53,21 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
     @DubboReference
     private InnerInterfaceInfoService innerInterfaceInfoService;
 
-    private static final String INTERFACE_HOST = "http://localhost:8102";
+    private static final String GATEWAY_HOST = "https://gateway.leshine.icu";// 数据库里存的接口地址
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         // 2. 请求日志
         ServerHttpRequest request = exchange.getRequest();
-        String path = INTERFACE_HOST + request.getPath().value();// 请求路径
+        String path = GATEWAY_HOST + request.getPath().value();// 请求路径
         String method = request.getMethod().toString();// 请求方法
         log.info("请求唯一标识：" + request.getId());
         log.info("请求路径：" + path);
         log.info("请求方法：" + method);
         log.info("请求参数：" + request.getQueryParams());
-        String sourceAddress = request.getLocalAddress().getHostString();
+        String sourceAddress = request.getLocalAddress().getHostString();// TODO
         log.info("请求来源地址：" + sourceAddress);
-        log.info("请求来源地址：" + request.getRemoteAddress());
+        log.info("请求来源地址：" + request.getRemoteAddress());// 发起请求的客户端 IP
         // 3. 访问控制——（黑白名单）
         // 取到响应对象
         ServerHttpResponse response = exchange.getResponse();
@@ -99,7 +99,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 //            return handleNoAuth(response);
 //        }
 
-        // 校验随机数
+        // 校验随机数（TODO 要存到数据库里面校验是否用过）
         if (Long.parseLong(nonce) > 100000) {
             return handleNoAuth(response);
         }
@@ -111,7 +111,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             return handleNoAuth(response);
         }
         // 和客户端使用同一套加密算法进行校验
-        // 实际上要从数据库中取出数据进行校验
+        // 从数据库中取出数据进行校验
         String serverSign = SignUtil.genSign(body, invokeUser.getSecretKey());
         if (!serverSign.equals(sign)) {
             return handleNoAuth(response);
@@ -215,6 +215,10 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         return response.setComplete();
     }
 
+    /**
+     * 控制自定义过滤器的优先级
+     * @return
+     */
     @Override
     public int getOrder() {
         return 0;
