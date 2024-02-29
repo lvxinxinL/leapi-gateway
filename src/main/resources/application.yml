@@ -28,6 +28,8 @@ logging:
 dubbo:
   application:
     name: dubbo-springboot-demo-provider
+  consumer:
+    timeout: 3000
   protocol:
     name: dubbo
     port: 22223

@@ -71,11 +71,11 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
         // 3. 访问控制——（黑白名单）
         // 取到响应对象
         ServerHttpResponse response = exchange.getResponse();
-        if (!IP_WHITE_LIST.contains(sourceAddress)) {
+//        if (!IP_WHITE_LIST.contains(sourceAddress)) {
             // 请求来源地址不在白名单中，无权限访问
             // 设置响应状态码
-            return handleNoAuth(response);
-        }
+//            return handleNoAuth(response);
+//        }
         // 4. 用户鉴权（判断 ak、sk 是否合法）
         // 获取请求头中携带的参数，校验调用接口的权限
         HttpHeaders headers = request.getHeaders();
@@ -104,7 +104,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             return handleNoAuth(response);
         }
 
-        // 校验时间戳 timestamp：和当前时间不能超过 5 min
+        // 防重放 XHR：校验时间戳 timestamp：和当前时间不能超过 5 min
         Long currentTime = System.currentTimeMillis() / 1000;
         final Long FIVE_MINUTES = 5 * 60L;
         if (currentTime - Long.parseLong(timestamp) >= FIVE_MINUTES) {
@@ -127,7 +127,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
             // 如果接口信息为空，处理未授权情况并返回响应
             return handleNoAuth(response);
         }
-        // TODO 校验该用户是否还有调用次数
+        // TODO 校验该用户在该接口上是否还有调用次数
 
         // 6. 请求转发，调用模拟接口
 //        Mono<Void> filter = chain.filter(exchange);
@@ -221,6 +221,6 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
      */
     @Override
     public int getOrder() {
-        return 0;
+        return Ordered.HIGHEST_PRECEDENCE + 100;
     }
 }
