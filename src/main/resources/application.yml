@@ -4,9 +4,8 @@ spring:
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    #    url: jdbc:mysql://localhost:3306/my_db
-    url: jdbc:mysql://localhost:3306/leapi
-    username: root
+    url: jdbc:mysql://47.113.229.185:3306/leapi
+    username: ghost
     password: root@csu
   main:
     web-application-type: reactive
@@ -17,6 +16,7 @@ spring:
       routes:
         - id: api_localhost # 路由规则唯一标识符
           uri: http://localhost:8102 # 目标服务地址，匹配此路由规则的将被转发
+#          uri: http://leapi_interface:8102 # 容器名
           predicates:
             - Path=/api/** # 路由断言（路由规则）
 logging:
@@ -35,4 +35,5 @@ dubbo:
     port: 22223
   registry:
     id: nacos-registry
-    address: nacos://localhost:8848
+    address: nacos://47.113.229.185:8848
+#    address: nacos://nacos:8848
